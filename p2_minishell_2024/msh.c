@@ -196,14 +196,31 @@ int main(int argc, char* argv[])
 
 		/************************ STUDENTS CODE ********************************/
 	   if (command_counter > 0) {
-			if (command_counter > MAX_COMMANDS){
+			if (command_counter > MAX_COMMANDS) {
 				printf("Error: Maximum number of commands is %d \n", MAX_COMMANDS);
 			}
-			else {
-				// Print command
-				print_command(argvv, filev, in_background);
-			}
-		}
+       } else if (command_counter == 1) {
+            pid_t pid = fork();
+            if (pid == 0) { 
+                if (execvp(argvv[0][0], argvv[0]) < 0) {
+                    perror("Execvp failed");
+                    exit(-1);
+                }
+            } else if (pid > 0) {
+                if (!in_background) {
+                    int status;
+                    waitpid(pid, &status, 0);
+                } else {
+                    printf("[%d]/n", pid);
+                }
+            } else {
+                perror("Fork Error");
+                exit(-2);
+            }
+       } else {
+        int pipefd[2*command_counter];
+        
+       }
 	}
 	
 	return 0;
