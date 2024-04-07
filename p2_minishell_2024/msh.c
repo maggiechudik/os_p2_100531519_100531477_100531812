@@ -219,6 +219,59 @@ int main(int argc, char* argv[])
             }
        } else {
         int pipefd[2*command_counter];
+        int pipe_counter = command_counter - 1;
+
+        for (int i =0; i < pipe_counter; ++i) {
+            if (pipe(pipefd + i*2) < 0) {
+                perror("Piping Error");
+                exit(-3);
+            }
+        }
+
+        for (int i = 0; i < command_counter; ++i) {
+            pid_t pid = fork();
+            if (pid == 0) {
+
+                if (i < pipe_counter) {
+                    if (dup2(pipefd[i * 2 + 1], STDOUT_FILENO) < 0) {
+                        perror("Duplication Error");
+                        exit(-4);
+                    }
+                }
+
+                if (i > 0) {
+                    if (dup2(pipefd[(i-1) * 2], STDIN_FILENO) < 0) {
+                        perror("Duplication Error");
+                        exit(-5);
+                    }
+                }
+
+                for(int j = 0; j < 2*MAX_COMMANDS; j++) {
+                    close(pipefd[j]); // Close all pipe ends
+                }
+
+                if(execvp(argvv[i][0], argvv[i]) < 0) {
+                    perror("execvp");
+                    exit(EXIT_FAILURE);
+                }
+            } else if(pid < 0) {
+                perror("fork");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        // Parent closes the pipes and waits for children
+        for(int i = 0; i < 2 * MAX_COMMANDS; i++) {
+            close(pipefd[i]);
+        }
+
+        if (!in_background) {
+            for(int i = 0; i < command_counter; i++) {
+                wait(NULL);
+            }
+        } else {
+            printf("[%d]\n", pid);
+        }
         
        }
 	}
