@@ -79,10 +79,6 @@ void execute_mycalc(char **argv) {
     }
 }
 
-/* myhistory */
-
-/* myhistory */
-
 struct command
 {
     // Store the number of commands in argvv
@@ -102,6 +98,184 @@ struct command * history;
 int head = 0;
 int tail = 0;
 int n_elem = 0;
+
+
+void list_history() {
+    for (int i = 0; i < n_elem; i++) {
+        int index = (head - n_elem + i + history_size) % history_size; // Ensure positive index
+        printf("%d ", i);
+        // Display redirection info
+        if (strcmp(history[index].filev[0], "0") != 0) {
+            printf("< %s ", history[index].filev[0]); // Input redirection
+        }
+        for (int j = 0; j < history[index].num_commands; j++) {
+            if (j != 0) {
+                printf("| ");
+            }
+            for (int p = 0; p < history[index].args[j]; p++) {
+                printf("%s ", history[index].argvv[j][p]);
+            }
+
+        }
+        if (strcmp(history[index].filev[1], "0") != 0) {
+            printf("> %s ", history[index].filev[1]); // Output redirection
+        }
+        if (strcmp(history[index].filev[2], "0") != 0) {
+            printf("2> %s ", history[index].filev[2]); // Error redirection
+        }
+        printf("\n");
+    }
+}
+
+
+void run_command(int command_counter, char*** argvv, int in_background, char filev[3][64]){
+    if (command_counter > MAX_COMMANDS) {
+        printf("Error: Maximum number of commands is %d \n", MAX_COMMANDS);
+    } else if (command_counter == 1 && strcmp(argvv[0][0], "mycalc") == 0) {
+        execute_mycalc(argvv[0]);
+    } else if (command_counter == 1) {
+        pid_t pid = fork();
+        if (pid == 0) {
+
+            // Input Redirection
+            if (strcmp(filev[0], "0") != 0) {
+                printf("changing input to other file for 1 command\n");
+                int fd_in = open(filev[0], O_RDONLY);
+                if (fd_in == -1) { perror("open"); exit(EXIT_FAILURE); }
+                dup2(fd_in, STDIN_FILENO);
+                close(fd_in);
+            }
+
+            // Output Redirection
+            if (strcmp(filev[1], "0") != 0) {
+                printf("changing output to other file for 1 command\n");
+                int fd_out = open(filev[1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd_out == -1) { perror("open"); exit(EXIT_FAILURE); }
+                dup2(fd_out, STDOUT_FILENO);
+                close(fd_out);
+            }
+
+            // Error Redirection
+            if (strcmp(filev[2], "0") != 0) {
+                int fd_err = open(filev[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd_err == -1) { perror("open"); exit(EXIT_FAILURE); }
+                dup2(fd_err, STDERR_FILENO);
+                close(fd_err);
+            }
+            if (execvp(argvv[0][0], argvv[0]) < 0) {
+                printf("doin sum \n");
+                perror("Execvp failed");
+                exit(-1);
+            }
+        } else if (pid > 0) {
+            if (!in_background) {
+                int status;
+                waitpid(pid, &status, 0);
+            } else {
+                printf("[%d]/n", pid);
+            }
+        } else {
+            perror("Fork Error");
+            exit(-2);
+        }
+    } else if (command_counter > 1) {
+        int pipefd[2 * (command_counter - 1)]; // Array to store pipe file descriptors
+
+        // Setup pipes
+        for (int i = 0; i < command_counter - 1; i++) {
+            if (pipe(pipefd + i * 2) < 0) {
+                perror("Piping Error");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        // Execute each command in the chain
+        for (int i = 0; i < command_counter; i++) {
+            pid_t pid = fork();
+
+            if (pid == 0) { // Child process
+                // Redirect output for all but the last command
+                if (i < command_counter - 1) {
+                    if (dup2(pipefd[i * 2 + 1], STDOUT_FILENO) < 0) {
+                        perror("Duplication Error");
+                        exit(EXIT_FAILURE);
+                    }
+                } else {
+                    // Last command: handle output redirection
+                    if (strcmp(filev[1], "0") != 0) {
+                        int fd_out = open(filev[1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                        dup2(fd_out, STDOUT_FILENO);
+                        close(fd_out);
+                    }
+                    // Handle error redirection for last command
+                    if (strcmp(filev[2], "0") != 0) {
+                        int fd_err = open(filev[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                        dup2(fd_err, STDERR_FILENO);
+                        close(fd_err);
+                    }
+                }
+
+                // Redirect input for all but the first command
+                if (i > 0) {
+                    if (dup2(pipefd[(i - 1) * 2], STDIN_FILENO) < 0) {
+                        perror("Duplication Error");
+                        exit(EXIT_FAILURE);
+                    }
+                } else {
+                    // First command: handle input redirection
+                    if (strcmp(filev[0], "0") != 0) {
+                        int fd_in = open(filev[0], O_RDONLY);
+                        dup2(fd_in, STDIN_FILENO);
+                        close(fd_in);
+                    }
+                }
+
+                // Close all pipe file descriptors in the child
+                for (int j = 0; j < 2 * (command_counter - 1); j++) {
+                    close(pipefd[j]);
+                }
+
+                // Execute the command
+                if (execvp(argvv[i][0], argvv[i]) < 0) {
+                    perror("execvp");
+                    exit(EXIT_FAILURE);
+                }
+            } else if (pid < 0) {
+                perror("fork");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        // Close all pipe file descriptors in the parent
+        for (int i = 0; i < 2 * (command_counter - 1); i++) {
+            close(pipefd[i]);
+        }
+
+        // Wait for all child processes to finish if not in background
+        if (!in_background) {
+            for (int i = 0; i < command_counter; i++) {
+                wait(NULL);
+            }
+        } else {
+            printf("Background command executed.\n");
+        }
+    }
+}
+
+void execute_from_history(int hist_index) {
+    struct command *cmd = &history[hist_index];
+
+    // Prepare for execution
+    char ***argvv = cmd->argvv;
+    int in_background = cmd->in_background;
+    int command_counter = cmd->num_commands; // Adding 1 as stored num_commands is one less
+
+    // No need for getCompleteCommand as run_command will handle execution
+    // Execute command
+    run_command(command_counter, argvv, in_background, cmd->filev);
+}
+
+
 
 void free_command(struct command *cmd)
 {
@@ -180,7 +354,6 @@ void getCompleteCommand(char*** argvv, int num_command) {
         argv_execvp[i] = argvv[num_command][i];
 }
 
-
 /**
  * Main sheell  Loop
  */
@@ -238,139 +411,27 @@ int main(int argc, char* argv[]) {
 
         /************************ STUDENTS CODE ********************************/
 
-
-        if (command_counter > MAX_COMMANDS) {
-            printf("Error: Maximum number of commands is %d \n", MAX_COMMANDS);
-        } else if (command_counter == 1 && strcmp(argvv[0][0], "mycalc") == 0) {
-            execute_mycalc(argvv[0]);
-        } else if (command_counter == 1) {
-            pid_t pid = fork();
-            if (pid == 0) {
-
-                // Input Redirection
-                if (strcmp(filev[0], "0") != 0) {
-                    printf("changing input to other file for 1 command\n");
-                    int fd_in = open(filev[0], O_RDONLY);
-                    if (fd_in == -1) { perror("open"); exit(EXIT_FAILURE); }
-                    dup2(fd_in, STDIN_FILENO);
-                    close(fd_in);
-                }
-
-                // Output Redirection
-                if (strcmp(filev[1], "0") != 0) {
-                    printf("changing output to other file for 1 command\n");
-                    int fd_out = open(filev[1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                    if (fd_out == -1) { perror("open"); exit(EXIT_FAILURE); }
-                    dup2(fd_out, STDOUT_FILENO);
-                    close(fd_out);
-                }
-
-                // Error Redirection
-                if (strcmp(filev[2], "0") != 0) {
-                    int fd_err = open(filev[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                    if (fd_err == -1) { perror("open"); exit(EXIT_FAILURE); }
-                    dup2(fd_err, STDERR_FILENO);
-                    close(fd_err);
-                }
-                if (execvp(argvv[0][0], argvv[0]) < 0) {
-                    perror("Execvp failed");
-                    exit(-1);
-                }
-            } else if (pid > 0) {
-                if (!in_background) {
-                    int status;
-                    waitpid(pid, &status, 0);
-                } else {
-                    printf("[%d]/n", pid);
-                }
-            } else {
-                perror("Fork Error");
-                exit(-2);
-            }
-        } else if (command_counter > 1) {
-            int pipefd[2 * (command_counter - 1)]; // Array to store pipe file descriptors
-
-            // Setup pipes
-            for (int i = 0; i < command_counter - 1; i++) {
-                if (pipe(pipefd + i * 2) < 0) {
-                    perror("Piping Error");
-                    exit(EXIT_FAILURE);
-                }
-            }
-
-            // Execute each command in the chain
-            for (int i = 0; i < command_counter; i++) {
-                pid_t pid = fork();
-
-                if (pid == 0) { // Child process
-                    // Redirect output for all but the last command
-                    if (i < command_counter - 1) {
-                        if (dup2(pipefd[i * 2 + 1], STDOUT_FILENO) < 0) {
-                            perror("Duplication Error");
-                            exit(EXIT_FAILURE);
-                        }
-                    } else {
-                        // Last command: handle output redirection
-                        if (strcmp(filev[1], "0") != 0) {
-                            int fd_out = open(filev[1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                            dup2(fd_out, STDOUT_FILENO);
-                            close(fd_out);
-                        }
-                        // Handle error redirection for last command
-                        if (strcmp(filev[2], "0") != 0) {
-                            int fd_err = open(filev[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                            dup2(fd_err, STDERR_FILENO);
-                            close(fd_err);
-                        }
-                    }
-
-                    // Redirect input for all but the first command
-                    if (i > 0) {
-                        if (dup2(pipefd[(i - 1) * 2], STDIN_FILENO) < 0) {
-                            perror("Duplication Error");
-                            exit(EXIT_FAILURE);
-                        }
-                    } else {
-                        // First command: handle input redirection
-                        if (strcmp(filev[0], "0") != 0) {
-                            int fd_in = open(filev[0], O_RDONLY);
-                            dup2(fd_in, STDIN_FILENO);
-                            close(fd_in);
-                        }
-                    }
-
-                    // Close all pipe file descriptors in the child
-                    for (int j = 0; j < 2 * (command_counter - 1); j++) {
-                        close(pipefd[j]);
-                    }
-
-                    // Execute the command
-                    if (execvp(argvv[i][0], argvv[i]) < 0) {
-                        perror("execvp");
-                        exit(EXIT_FAILURE);
-                    }
-                } else if (pid < 0) {
-                    perror("fork");
-                    exit(EXIT_FAILURE);
-                }
-            }
-
-            // Close all pipe file descriptors in the parent
-            for (int i = 0; i < 2 * (command_counter - 1); i++) {
-                close(pipefd[i]);
-            }
-
-            // Wait for all child processes to finish if not in background
-            if (!in_background) {
-                for (int i = 0; i < command_counter; i++) {
-                    wait(NULL);
-                }
-            } else {
-                printf("Background command executed.\n");
-            }
+        if (command_counter > 0 && strcmp(argvv[0][0], "myhistory") != 0) { // Avoid storing "myhistory" command itself
+            store_command(argvv, filev, in_background, &history[head]);
+            head = (head + 1) % history_size; // Move head to next position circularly
+            if (n_elem < history_size) n_elem++; // Increment number of elements until history is full
         }
 
-
+        if (strcmp(argvv[0][0], "myhistory") == 0) {
+            if (argvv[0][1] == NULL) {
+                list_history();
+            } else {
+                int hist_index = atoi(argvv[0][1]);
+                if (hist_index >= 0 && hist_index < n_elem) {
+                    execute_from_history(hist_index);
+                } else {
+                    printf("ERROR: Command not found\n");
+                }
+            }
+        }
+        else {
+            run_command(command_counter, argvv, in_background, filev);
+        }
     }
     return 0;
 }
