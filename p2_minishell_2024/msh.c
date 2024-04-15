@@ -24,12 +24,6 @@ char filev[3][64];
 //to store the execvp second parameter
 char *argv_execvp[8];
 
-void siginthandler(int param)
-{
-    printf("****  Exiting MSH **** \n");
-    //signal(SIGINT, siginthandler);
-    exit(0);
-}
 
 // Initialize or update the "Acc" environment variable
 void updateAcc(int value) {
@@ -323,6 +317,16 @@ void free_command(struct command *cmd)
         }
     }
     free((*cmd).args);
+}
+
+void siginthandler(int param)
+{
+    for (int i = 0; i < n_elem; i++) {
+        free_command(&history[i]);
+    }
+    printf("****  Exiting MSH **** \n");
+    //signal(SIGINT, siginthandler);
+    exit(0);
 }
 
 void store_command(char ***argvv, char filev[3][64], int in_background, struct command* cmd)
