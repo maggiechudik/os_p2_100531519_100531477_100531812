@@ -48,7 +48,7 @@ void execute_mycalc(char **argv) {
     // Check for the correct number of arguments
     // Assuming argv is ["mycalc", "operand1", "operator", "operand2", NULL]
     if (argv[1] == NULL || argv[2] == NULL || argv[3] == NULL || argv[4] != NULL) {
-        printf("[ERROR] The structure of the command is mycalc <operand 1> <add/mul/div> <operand 2>\n");
+        printf("[ERROR] The structure of the command is mycalc <operand_1> <add/mul/div> <operand_2>\n");
         return;
     }
 
@@ -89,7 +89,7 @@ void execute_mycalc(char **argv) {
                  result, remainder);
         write(STDERR_FILENO,  std_err_output_msg, strlen( std_err_output_msg));
     } else {
-        printf("[ERROR] The structure of the command is mycalc <operand 1> <add/mul/div> <operand 2>\n");
+        printf("[ERROR] The structure of the command is mycalc <operand_1> <add/mul/div> <operand_2>\n");
     }
 }
 
