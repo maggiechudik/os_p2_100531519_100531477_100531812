@@ -290,7 +290,9 @@ void run_command(int command_counter, char*** argvv, int in_background, char fil
 }
 
 void execute_from_history(int hist_index) {
-    struct command *cmd = &history[hist_index];
+    int index = (head - n_elem + hist_index + history_size) % history_size; //Ensure positive index
+    struct command *cmd = &history[index];
+
 
     // Prepare for execution
     char ***argvv = cmd->argvv;
