@@ -1,7 +1,6 @@
 //P2-SSOO-23/24
 
 //  MSH main file
-// Write your msh source code here
 
 //#include "parser.h"
 #include <stddef.h>			/* NULL */
@@ -210,7 +209,6 @@ void run_command(int command_counter, char*** argvv, int in_background, char fil
                 close(fd_err);
             }
             if (execvp(argvv[0][0], argvv[0]) < 0) {
-                printf("doin sum \n");
                 perror("Execvp failed");
                 exit(-1);
             }
