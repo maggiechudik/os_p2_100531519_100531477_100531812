@@ -26,6 +26,11 @@ char *argv_execvp[8];
 
 
 // Initialize or update the "Acc" environment variable
+/**
+ * Function that either intializes the "Acc" environment variable that is to be used by the
+ * mycalc internal function after performing addition operations.
+ * @param value the value to increment Acc by
+ */
 void updateAcc(int value) {
     char *accStr = getenv("Acc");
     int acc = 0;
@@ -38,6 +43,12 @@ void updateAcc(int value) {
     setenv("Acc", newAcc, 1);
 }
 
+
+/**
+ * Function that executes the mycalc internal function by checking for the correct number of
+ * arguments, detects errors if there are any, and prints out the appropriate output.
+ * @param argv The array of arguments inputted into the command line by the user.
+ */
 void execute_mycalc(char **argv) {
     // Check for the correct number of arguments
     // Assuming argv is ["mycalc", "operand1", "operator", "operand2", NULL]
@@ -101,6 +112,10 @@ struct command
     int in_background;
 };
 
+/**
+ * Variables relevant to storing and keeping track of the 20 most recent command for the
+ * myhistory command
+ */
 int history_size = 20;
 struct command * history;
 int head = 0;
@@ -108,11 +123,13 @@ int tail = 0;
 int n_elem = 0;
 
 
+/**
+ * Function that is called by the myhistory command in order to list the 20 most recent commands
+ * inputted by the user (excluding any myhistory commands made). Again, the lab description says
+ * to list the history by writing to the standard ERROR output instead of just the standard
+ * output (printf()).
+ */
 void list_history() {
-    /**
-     *  Again, the lab description says to list the history by writing to the standard ERROR
-     *  output instead of just the standard output (printf())
-     */
     for (int i = 0; i < n_elem; i++) {
         int index = (head - n_elem + i + history_size) % history_size; // Ensure positive index
         char std_err_output_msg[1024];
@@ -149,6 +166,15 @@ void list_history() {
 }
 
 
+/**
+ * General purpose function that is used to run a list of commands, taking into account the
+ * number of commands inputted by the user, if it should be run in the background, and the
+ * respective arguments for each
+ * @param command_counter The number of commands inputted by the user
+ * @param argvv The array of commands inputted by the user
+ * @param in_background Dictates whether the command should be run in the background or not
+ * @param filev Represents the input/output redirection, if any
+ */
 void run_command(int command_counter, char*** argvv, int in_background, char filev[3][64]){
     if (command_counter > MAX_COMMANDS) {
         printf("Error: Maximum number of commands is %d \n", MAX_COMMANDS);
@@ -283,8 +309,14 @@ void run_command(int command_counter, char*** argvv, int in_background, char fil
     }
 }
 
+/**
+ * Helper function that can be called from the myhistory command if a user wants to run a specific
+ * past command from a user's history of their 20 most recent commands.
+ * @param hist_index The index of the last command that the user would like to run.
+ */
 void execute_from_history(int hist_index) {
-    int index = (head - n_elem + hist_index + history_size) % history_size; //Ensure positive index
+    // Ensure positive index, % by history size to ensure that it wraps around
+    int index = (head - n_elem + hist_index + history_size) % history_size;
     struct command *cmd = &history[index];
 
 
@@ -298,8 +330,7 @@ void execute_from_history(int hist_index) {
     run_command(command_counter, argvv, in_background, cmd->filev);
 }
 
-
-
+// Given default code
 void free_command(struct command *cmd)
 {
     if((*cmd).argvv != NULL)
@@ -321,6 +352,7 @@ void free_command(struct command *cmd)
 
 void siginthandler(int param)
 {
+    // Make sure to free the stored commands to free resources after done running MSH
     for (int i = 0; i < n_elem; i++) {
         free_command(&history[i]);
     }
@@ -329,6 +361,7 @@ void siginthandler(int param)
     exit(0);
 }
 
+// Given default code
 void store_command(char ***argvv, char filev[3][64], int in_background, struct command* cmd)
 {
     int num_commands = 0;
@@ -373,9 +406,8 @@ void store_command(char ***argvv, char filev[3][64], int in_background, struct c
 /**
  * Get the command with its parameters for execvp
  * Execute this instruction before run an execvp to obtain the complete command
- * @param argvv
- * @param num_command
- * @return
+ * @param argvv The array of commands inputted by the user
+ * @param num_command The number of commands inputted by the user.
  */
 void getCompleteCommand(char*** argvv, int num_command) {
     //reset first
